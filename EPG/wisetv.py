@@ -12,7 +12,6 @@ async def get_epgs_wisetv(channel, dt):
     dt_str = dt.strftime('%Y%m%d')
     channel_id = channel['id']
     channel_id0 = channel['id0']
-    android_id = secrets.token_hex(8)
     try:
         async with httpx.AsyncClient() as client:
             # res = await client.get(f"https://api.wisetv.com.cn:8684/6/program/{channel_id0}/{dt_str}", headers=headers,follow_redirects=True)
@@ -83,5 +82,6 @@ async def get_channels_wisetv():
         print(channel)
     return channels
 
-# asyncio.run(get_channels_wisetv())
-# asyncio.run(get_epgs_wisetv({'id': 'jstv_30001110000000000000000000000698', 'name': '天津卫视', 'id0': '30001110000000000000000000000698', 'source': 'wisetvtv'}, datetime.datetime.now()))
+# if __name__ == '__main__':
+#     asyncio.run(get_channels_wisetv())
+    # asyncio.run(get_epgs_wisetv({'id': 'wisetv_30001110000000000000000000000698', 'name': '天津卫视', 'id0': '30001110000000000000000000000698', 'source': 'wisetv'}, datetime.datetime.now()))

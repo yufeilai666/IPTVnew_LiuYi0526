@@ -4,10 +4,6 @@ import re
 import datetime
 import json
 import os
-import datetime
-import re
-import os
-import datetime
 import httpx
 
 # requests.packages.urllib3.util.ssl_.DEFAULT_CIPHERS += ':HIGH:!DH:!aNULL'
@@ -97,7 +93,8 @@ async def get_channels_nowtv():
             'id0': channel_id,
             'source': 'nowtv',
         }
-        print(channel)
+        # print(channel)
+        # print(f'#EXTINF:-1 tvg-id="nowtv_{channel_id}" tvg-name="{name}" tvg-logo="https://images.now-tv.com/shares/channelPreview/img/zh_tw/color/ch{channel_id}_170_122" group-title="Now TV",{channel_id} {name}')
         channels.append(channel)
     return channels
 

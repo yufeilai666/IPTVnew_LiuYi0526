@@ -2,7 +2,6 @@ import httpx
 import datetime
 import asyncio
 import os
-import datetime
 import time
 import re
 
@@ -106,5 +105,6 @@ async def get_channels_starhub():
             print(channel)
     return channels
 
-# asyncio.run(get_channels_starhub())
-# asyncio.run(get_epgs_starhub({'id': 'starhub_d440ee6e-6f9a-4d78-b37b-5be89051145a', 'name': 'Phoenix InfoNews Channel HD', 'id0': 'd440ee6e-6f9a-4d78-b37b-5be89051145a', 'source': 'starhub'}, dt=datetime.datetime.now()))
+# if __name__ == '__main__':
+#     asyncio.run(get_channels_starhub())
+    # asyncio.run(get_epgs_starhub({'id': 'starhub_d440ee6e-6f9a-4d78-b37b-5be89051145a', 'name': 'Phoenix InfoNews Channel HD', 'id0': 'd440ee6e-6f9a-4d78-b37b-5be89051145a', 'source': 'starhub'}, dt=datetime.datetime.now()))

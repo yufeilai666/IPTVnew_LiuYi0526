@@ -51,7 +51,112 @@ from astro import *
 
 beijing_tz = pytz.timezone('Asia/Shanghai')
 
+MAX_RETRIES = 5
+MODE_PLAIN = 'plain'
+MODE_DATE = 'date'
+MODE_OFFSET = 'offset'
+
+THREE_DAY_OFFSETS = (-1, 0, 1)
+
+EPG_SOURCE_CONFIGS = {
+    'cctv': (get_epgs_cctv, MODE_DATE, range(-6, 2)),
+    'tvmao': (get_epgs_tvmao, MODE_DATE, range(-6, 2)),
+    'radiocn': (get_epgs_radiocn, MODE_DATE, range(-6, 2)),
+    'xjtvs': (get_epgs_xjtvs, MODE_DATE, THREE_DAY_OFFSETS),
+    'nowtv': (get_epgs_nowtv, MODE_DATE, THREE_DAY_OFFSETS),
+    'mod': (get_epgs_mod, MODE_DATE, THREE_DAY_OFFSETS),
+    'hami': (get_epgs_hami, MODE_DATE, THREE_DAY_OFFSETS),
+    'ETTVAmerica': (get_epgs_ettvamerica, MODE_DATE, THREE_DAY_OFFSETS),
+    'tdm': (get_epgs_tdm, MODE_DATE, THREE_DAY_OFFSETS),
+    'tbc': (get_epgs_tbc, MODE_PLAIN, None),
+    'jxgdw': (get_epgs_jxgdw, MODE_DATE, (0,)),
+    'epg.pw': (get_epgs_epgpw, MODE_PLAIN, None),
+    'ntdtv': (get_epgs_ntdtv, MODE_PLAIN, None),
+    'suntv': (get_epgs_suntv, MODE_PLAIN, None),
+    '4gtv': (get_epgs_4gtv, MODE_PLAIN, None),
+    'homeplus': (get_epgs_homeplus, MODE_PLAIN, None),
+    'mytvsuper': (get_epgs_mytvsuper, MODE_DATE, (0,)),
+    'cctvplus': (get_epgs_cctvplus, MODE_PLAIN, None),
+    'hoy': (get_epgs_hoy, MODE_DATE, (0,)),
+    'litv': (get_epgs_litv, MODE_PLAIN, None),
+    '1905': (get_epgs_1905, MODE_DATE, (0,)),
+    'RTHK': (get_epgs_RTHK, MODE_DATE, THREE_DAY_OFFSETS),
+    'gdtv': (get_epgs_gdtv, MODE_DATE, THREE_DAY_OFFSETS),
+    'hnntv': (get_epgs_hnntv, MODE_PLAIN, None),
+    'hntv': (get_epgs_hntv, MODE_DATE, THREE_DAY_OFFSETS),
+    'cztv': (get_epgs_cztv, MODE_DATE, THREE_DAY_OFFSETS),
+    'gxntv': (get_epgs_gxntv, MODE_DATE, THREE_DAY_OFFSETS),
+    'iqilu': (get_epgs_iqilu, MODE_DATE, (-2, -1, 0)),
+    'kankanews': (get_epgs_kankanews, MODE_DATE, THREE_DAY_OFFSETS),
+    'jstv': (get_epgs_jstv, MODE_PLAIN, None),
+    'hebtv': (get_epgs_hebtv, MODE_DATE, (0,)),
+    'fjtv': (get_epgs_fjtv, MODE_DATE, THREE_DAY_OFFSETS),
+    'wisetv': (get_epgs_wisetv, MODE_DATE, THREE_DAY_OFFSETS),
+    'sztv': (get_epgs_sztv, MODE_PLAIN, None),
+    'gehua': (get_epgs_gehua, MODE_DATE, THREE_DAY_OFFSETS),
+    'sc96655': (get_epgs_sc96655, MODE_DATE, THREE_DAY_OFFSETS),
+    'bfgd': (get_epgs_bfgd, MODE_DATE, THREE_DAY_OFFSETS),
+    'sxtvs': (get_epgs_sxtvs, MODE_PLAIN, None),
+    'xmtv': (get_epgs_xmtv, MODE_OFFSET, THREE_DAY_OFFSETS),
+    'fengshows': (get_epgs_fengshows, MODE_DATE, THREE_DAY_OFFSETS),
+    'starhub': (get_epgs_starhub, MODE_DATE, THREE_DAY_OFFSETS),
+    'btzx': (get_epgs_btzx, MODE_DATE, THREE_DAY_OFFSETS),
+    'astro': (get_epgs_astro, MODE_DATE, (0, 1, 2)),
+}
+
+
+def _iter_fetch_targets(mode, offsets, today):
+    if mode == MODE_PLAIN:
+        yield None
+    elif mode == MODE_DATE:
+        for offset in offsets:
+            yield today + datetime.timedelta(days=offset)
+    elif mode == MODE_OFFSET:
+        for offset in offsets:
+            yield offset
+    else:
+        raise ValueError(f'Unsupported EPG mode: {mode}')
+
+
+async def _call_epg_handler(handler, c, mode, target):
+    if mode == MODE_PLAIN:
+        return await handler(c)
+    return await handler(c, target)
+
+
+async def _fetch_epgs_with_retries(c, handler, mode, target):
+    fail_context = f'{c}' if mode == MODE_PLAIN else f'{c}, {target}'
+    for retry in range(1, MAX_RETRIES + 1):
+        ret = await _call_epg_handler(handler, c, mode, target)
+        if ret.get('success'):
+            return ret.get('epgs', []), True
+        logging.warning(f"{ret.get('msg', '')}, 将进行第{retry}次重试！")
+
+    logging.warning(f'{fail_context}获取失败！')
+    return [], False
+
+
 async def get_epgs(c):
+    logging.info(c)
+    config = EPG_SOURCE_CONFIGS.get(c['source'])
+    if config is None:
+        logging.warning(f"{c} 未配置 EPG 处理器，使用旧逻辑尝试获取。")
+        return await _get_epgs_legacy(c)
+
+    handler, mode, offsets = config
+    today = datetime.datetime.now().date()
+    epgs = []
+    success = '✅'
+    for target in _iter_fetch_targets(mode, offsets, today):
+        channel_epgs, ok = await _fetch_epgs_with_retries(c, handler, mode, target)
+        epgs.extend(channel_epgs)
+        if not ok:
+            success = '❌'
+
+    return epgs, f"|{c['id']}|{c['name']}|{success}|\n"
+
+
+async def _get_epgs_legacy(c):
     logging.info(c)
     epgs = []
     times = 0
@@ -812,25 +917,21 @@ async def limited_get_epgs(c, semaphore):
         return result
 
 
-async def gen_xml(channels, filename):
+async def gen_xml(channels, filename, max_concurrency=3):
     tz = ' +0800'
-    # tasks = [get_epgs(c) for c in channels]
-    # semaphore = asyncio.Semaphore(3)
-    # tasks = [limited_get_epgs(c, semaphore) for c in channels]
-    # epgs0 = await asyncio.gather(*tasks)
-    epgs0 = []
-    for c in channels:
-        logging.info(c)
-        epgs0.append(await get_epgs(c))
+    if max_concurrency > 1:
+        semaphore = asyncio.Semaphore(max_concurrency)
+        tasks = [limited_get_epgs(c, semaphore) for c in channels]
+        epgs0 = await asyncio.gather(*tasks)
+    else:
+        epgs0 = [await get_epgs(c) for c in channels]
     epgs = []
     README = ['|tvg-id|tvg-name|EPG状态|\n', '|:---:|:---:|:---:|\n']
     for i, text in epgs0:
         README.append(text)
-        for k in i:
-            epgs.append(k)
-    f = open('README.md', 'w', encoding='utf-8')
-    f.writelines(README)
-    f.close()
+        epgs.extend(i)
+    with open('README.md', 'w', encoding='utf-8') as f:
+        f.writelines(README)
     tv = ET.Element('tv')
     for channel in channels:
         channel_element = ET.SubElement(tv, 'channel', {'id': channel['id']})
