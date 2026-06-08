@@ -48,6 +48,7 @@ from fengshows import *
 from starhub import *
 from btzx import *
 from astro import *
+from ysp_jce import get_epgs_ysp_jce
 
 beijing_tz = pytz.timezone('Asia/Shanghai')
 
@@ -102,6 +103,7 @@ EPG_SOURCE_CONFIGS = {
     'starhub': (get_epgs_starhub, MODE_DATE, THREE_DAY_OFFSETS),
     'btzx': (get_epgs_btzx, MODE_DATE, THREE_DAY_OFFSETS),
     'astro': (get_epgs_astro, MODE_DATE, (0, 1, 2)),
+    'YSP_JCE': (get_epgs_ysp_jce, MODE_PLAIN, None),
 }
 
 
@@ -1004,6 +1006,12 @@ if __name__ == '__main__':
         {'id': 'cctv_cetv3', 'name': 'CETV-3', 'id0': 'cetv3', 'source': 'cctv'},
         {'id': 'cctv_cetv4', 'name': 'CETV-4', 'id0': 'cetv4', 'source': 'cctv'},
         {'id': 'cctv_zaoqijiaoyu', 'name': '早期教育', 'id0': 'zaoqijiaoyu', 'source': 'cctv'},
+        {'id': 'cctv_cctv9', 'name': 'CGTN', 'id0': '600014550', 'source': 'YSP_JCE'},
+        {'id': 'cctv_cctvfrench', 'name': 'CGTN法语频道', 'id0': '600084704', 'source': 'YSP_JCE'},
+        {'id': 'cctv_cctvrussian', 'name': 'CGTN俄语频道', 'id0': '600084758', 'source': 'YSP_JCE'},
+        {'id': 'cctv_cctvarabic', 'name': 'CGTN阿拉伯语频道', 'id0': '600084782', 'source': 'YSP_JCE'},
+        {'id': 'cctv_cctvxiyu', 'name': 'CGTN西班牙语频道', 'id0': '600084744', 'source': 'YSP_JCE'},
+        {'id': 'cctv_cctvdoc', 'name': 'CGTN外语纪录频道', 'id0': '600084781', 'source': 'YSP_JCE'},
         {'id': 'cctvplus_channel1', 'name': 'CCTV+ Channel 1', 'id0': 'channel1', 'source': 'cctvplus'},
         {'id': 'cctvplus_channel2', 'name': 'CCTV+ Channel 2', 'id0': 'channel2', 'source': 'cctvplus'},
         {'id': 'cctvplus_channel3', 'name': 'CCTV+ Channel 3', 'id0': 'channel3', 'source': 'cctvplus'},
