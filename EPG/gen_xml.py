@@ -103,7 +103,7 @@ EPG_SOURCE_CONFIGS = {
     'starhub': (get_epgs_starhub, MODE_DATE, THREE_DAY_OFFSETS),
     'btzx': (get_epgs_btzx, MODE_DATE, THREE_DAY_OFFSETS),
     'astro': (get_epgs_astro, MODE_DATE, (0, 1, 2)),
-    'YSP_JCE': (get_epgs_ysp_jce, MODE_PLAIN, None),
+    'YSP_JCE': (get_epgs_ysp_jce, MODE_DATE, range(-6, 2)),
 }
 
 

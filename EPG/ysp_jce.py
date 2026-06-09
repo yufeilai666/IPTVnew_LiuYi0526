@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Fetch CCTV8K Y_JCE EPG from jacc.ysp.cctv.cn and save it as XMLTV.
+Fetch CCTV8K EPG through the TVShowList Y_JCE request and save it as XMLTV.
 
-The request layout is ported from the Android code in this repository:
-com.lizongying.mytv.jce.JceRequestBodyConverter and b.java.
+This script is modeled after scripts/2.bin:
+cmdId=24997 (TVShowList)
+body tag0="cctv_tv_tab_program"
+body tag1="day=YYYY-MM-DD&pid=600156816&timestamp=..."
 """
 
 from __future__ import annotations
@@ -16,19 +18,21 @@ import ssl
 import struct
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Callable, Iterable, Optional, TypeVar
+from typing import Callable, Optional, TypeVar
+
 
 
 JACC_URL = "https://jacc.ysp.cctv.cn/"
 CCTV8K_PID = "600156816"
 CCTV8K_CHANNEL_ID = "CCTV8K"
 CCTV8K_CHANNEL_NAME = "CCTV8K 超高清"
-CMD_TV_TIME_SHIFT_PROGRAM = 24897
+CMD_TV_SHOW_LIST = 24997
 DEFAULT_GUID = "093e7e5989684fd986c44f07542d8dc8"
 USER_AGENT = "CCTVVideo/2.9.0 (iPad; iOS 17.2; Scale/2.00)"
 CN_TZ = timezone(timedelta(hours=8))
@@ -53,24 +57,11 @@ T = TypeVar("T")
 
 
 @dataclass
-class TVProgram:
-    program_id: str
+class TVShowProgram:
+    title: str
+    display_time: str
     start_time_stamp: int
-    epg_time: str
-    name: str
-    copy_right: int
-    time_shift_flag: int
     duration: int
-    pic_screen_flag: int
-    video_screen_flag: int
-
-
-@dataclass
-class TVTimeShiftProgramResponse:
-    errcode: int
-    errmsg: str
-    programs: list[TVProgram]
-    time_shift_flag: int
 
 
 class JceDecodeError(RuntimeError):
@@ -340,16 +331,32 @@ class JceReader:
         return items
 
 
-def write_tv_time_shift_program_request(writer: JceWriter, pid: str) -> None:
-    writer.write_string(pid, 0)
+def write_float(writer: JceWriter, value: float, tag: int) -> None:
+    writer.write_head(TYPE_FLOAT, tag)
+    writer.buf.extend(struct.pack(">f", value))
 
 
-def write_business_extent(writer: JceWriter) -> None:
-    writer.write_int(1, 0)
+def write_double(writer: JceWriter, value: float, tag: int) -> None:
+    writer.write_head(TYPE_DOUBLE, tag)
+    writer.buf.extend(struct.pack(">d", value))
 
 
-def write_business_head(writer: JceWriter) -> None:
+def write_empty_list(writer: JceWriter, tag: int) -> None:
+    writer.write_head(TYPE_LIST, tag)
     writer.write_int(0, 0)
+
+
+def write_extent_data(writer: JceWriter) -> None:
+    writer.write_int(0, 0)
+    writer.write_byte(0, 1)
+    writer.write_string("", 2)
+
+
+def write_coordinates(writer: JceWriter) -> None:
+    writer.write_int(0, 0)
+    write_float(writer, 0.0, 1)
+    write_float(writer, 0.0, 2)
+    write_double(writer, 0.0, 3)
 
 
 def write_qua(writer: JceWriter) -> None:
@@ -368,9 +375,11 @@ def write_qua(writer: JceWriter) -> None:
     writer.write_string("", 12)
     writer.write_string("78d6ac7572afb5461e9a590f089f893d2abc0010119007", 13)
     writer.write_string("", 14)
+    writer.write_struct(15, write_extent_data)
     writer.write_string("A41CD6B6-6A56-46DC-9AE0-4ECF2E9118DF", 16)
     writer.write_string("", 17)
     writer.write_string("", 18)
+    writer.write_struct(19, write_coordinates)
     writer.write_string("5EE46760-11B1-5FE7-949A-FF232DAE1823", 20)
     writer.write_string("iPad Pro (12.9 inch) 3G", 21)
     writer.write_int(1, 22)
@@ -383,41 +392,65 @@ def write_qua(writer: JceWriter) -> None:
     writer.write_string("1c0fc6ed8a53584ae722b915200014317601", 29)
 
 
-def write_request_head(writer: JceWriter, request_id: int, cmd_id: int, guid: str) -> None:
+def write_log_report(writer: JceWriter) -> None:
+    writer.write_string("page_columnlist", 0)
+    writer.write_string("page_columnlist", 1)
+    writer.write_int(6, 2)
+    writer.write_string("self", 3)
+    writer.write_int(0, 4)
+    writer.write_string("", 5)
+    writer.write_string("", 6)
+    writer.write_string("10006", 8)
+    writer.write_string("", 9)
+    writer.write_string("", 10)
+
+
+def write_request_head(writer: JceWriter, request_id: int, guid: str) -> None:
     writer.write_int(request_id, 0)
-    writer.write_int(cmd_id, 1)
+    writer.write_int(CMD_TV_SHOW_LIST, 1)
     writer.write_struct(2, write_qua)
     writer.write_string("1200013", 3)
     writer.write_string(guid, 4)
+    write_empty_list(writer, 5)
+    writer.write_struct(6, write_log_report)
+    write_empty_list(writer, 7)
     writer.write_int(0, 8)
     writer.write_int(0, 9)
     writer.write_int(0, 10)
-    writer.write_struct(12, write_business_extent)
 
 
-def make_request_command(pid: str, request_id: int, cmd_id: int, guid: str) -> bytes:
-    body_writer = JceWriter()
-    write_tv_time_shift_program_request(body_writer, pid)
-
-    command_writer = JceWriter()
-    command_writer.write_struct(
-        0, lambda w: write_request_head(w, request_id=request_id, cmd_id=cmd_id, guid=guid)
+def make_business_body(pid: str, day: str, timestamp: int) -> bytes:
+    query = urllib.parse.urlencode(
+        [("day", day), ("pid", pid), ("timestamp", str(timestamp))]
     )
-    command_writer.write_bytes(body_writer.to_bytes(), 1)
-    command_writer.write_struct(2, write_business_head)
-    return command_writer.to_bytes()
+    writer = JceWriter()
+    writer.write_string("cctv_tv_tab_program", 0)
+    writer.write_string(query, 1)
+    return writer.to_bytes()
 
 
-def wrap_unified_protocol(jce_body: bytes, request_id: int, cmd_id: int, guid: str) -> bytes:
-    inner_len = len(jce_body) + 17
+def make_request_command(pid: str, day: str, timestamp: int, request_id: int, guid: str) -> bytes:
+    writer = JceWriter()
+    writer.write_struct(0, lambda w: write_request_head(w, request_id, guid))
+    writer.write_bytes(make_business_body(pid, day, timestamp), 1)
+    return writer.to_bytes()
+
+
+def wrap_android_unified_protocol(
+    command_body: bytes,
+    *,
+    request_id: int,
+    guid: str,
+    version_code: int = 302060,
+) -> bytes:
+    inner_len = len(command_body) + 17
     inner = bytearray()
     inner.append(38)
     inner.extend(struct.pack(">i", inner_len))
     inner.append(1)
     inner.extend(b"\x00" * 10)
-    inner.extend(jce_body)
+    inner.extend(command_body)
     inner.append(40)
-
     compressed_inner = gzip.compress(bytes(inner))
 
     out = bytearray()
@@ -425,15 +458,15 @@ def wrap_unified_protocol(jce_body: bytes, request_id: int, cmd_id: int, guid: s
     out.extend(struct.pack(">i", 0))
     out.extend(struct.pack(">h", 2))
     out.extend(struct.pack(">H", 0xFF01))
-    out.extend(struct.pack(">H", cmd_id))
+    out.extend(struct.pack(">H", CMD_TV_SHOW_LIST))
     out.extend(struct.pack(">h", 0))
     out.extend(struct.pack(">q", request_id))
     out.extend(struct.pack(">i", 531))
-    out.extend(struct.pack(">i", 0))
+    out.extend(struct.pack(">i", 10012))
     out.extend(struct.pack(">q", 0))
     out.extend(guid.encode("utf-8")[:32].ljust(32, b"\x00"))
-    out.append(0)
-    out.extend(struct.pack(">i", 0))
+    out.append(1)
+    out.extend(struct.pack(">i", version_code))
     out.extend(b"\x00" * 6)
     out.append(0)
     out.extend(struct.pack(">h", 0))
@@ -445,41 +478,29 @@ def wrap_unified_protocol(jce_body: bytes, request_id: int, cmd_id: int, guid: s
     return bytes(out)
 
 
+def build_request(pid: str, day: str, timestamp: int, request_id: int, guid: str) -> bytes:
+    command_body = make_request_command(pid, day, timestamp, request_id, guid)
+    return wrap_android_unified_protocol(command_body, request_id=request_id, guid=guid)
+
+
 def unwrap_unified_protocol(data: bytes) -> bytes:
     if len(data) < 90:
         raise JceDecodeError(f"response is too short: {len(data)} bytes")
-    pos = 0
-    version = data[pos]
-    pos += 1
-    total_len = struct.unpack_from(">i", data, pos)[0]
-    pos += 4
-    pos += 2
-    magic = struct.unpack_from(">H", data, pos)[0]
-    pos += 2
-    cmd_id = struct.unpack_from(">H", data, pos)[0]
-    pos += 2
-    error_code = struct.unpack_from(">H", data, pos)[0]
-    pos += 2
-    pos += 8
-    flags = struct.unpack_from(">i", data, pos)[0]
-    pos += 4
 
-    if version != 19 or total_len != len(data):
+    version = data[0]
+    total_len = struct.unpack_from(">i", data, 1)[0]
+    magic = struct.unpack_from(">H", data, 7)[0]
+    cmd_id = struct.unpack_from(">H", data, 9)[0]
+    error_code = struct.unpack_from(">H", data, 11)[0]
+    flags = struct.unpack_from(">i", data, 21)[0]
+    if version != 19 or total_len != len(data) or magic != 0xFF01:
         raise JceDecodeError("invalid unified protocol response header")
-    if magic != 0xFF01:
-        raise JceDecodeError(f"invalid unified protocol magic: 0x{magic:04x}")
+    if cmd_id != CMD_TV_SHOW_LIST:
+        raise JceDecodeError(f"unexpected response cmd id: {cmd_id}")
     if error_code != 0:
         raise JceDecodeError(f"server returned unified protocol error: {error_code}")
-    if cmd_id != CMD_TV_TIME_SHIFT_PROGRAM:
-        raise JceDecodeError(f"unexpected response cmd id: {cmd_id}")
 
-    compressed = bool(flags & 2)
-    if compressed and not (flags & 16):
-        raise JceDecodeError("response says gzip is used but gzip flag is missing")
-
-    pos += 4
-    pos += 8
-    pos += 32
+    pos = 69
     pos += 1
     pos += 10
     pos += 1
@@ -493,14 +514,9 @@ def unwrap_unified_protocol(data: bytes) -> bytes:
     if data[-1] != 3:
         raise JceDecodeError("invalid unified protocol tail")
     payload = data[pos:-1]
-    inner = gzip.decompress(payload) if compressed else payload
-
-    if len(inner) < 17 or inner[0] != 38 or inner[-1] != 40:
+    inner = gzip.decompress(payload) if flags & 2 else payload
+    if len(inner) != inner_len or len(inner) < 17 or inner[0] != 38 or inner[-1] != 40:
         raise JceDecodeError("invalid inner protocol wrapper")
-    if inner_len != len(inner):
-        raise JceDecodeError(
-            f"inner length mismatch: header={inner_len}, actual={len(inner)}"
-        )
     return inner[16:-1]
 
 
@@ -521,57 +537,139 @@ def parse_response_command(data: bytes) -> bytes:
         raise JceDecodeError("response command is missing head or body")
     if int(head["err_code"]) != 0:
         raise JceDecodeError(f"server returned command error: {head['err_code']}")
-    if int(head["cmd_id"]) != CMD_TV_TIME_SHIFT_PROGRAM:
+    if int(head["cmd_id"]) != CMD_TV_SHOW_LIST:
         raise JceDecodeError(f"unexpected command body cmd id: {head['cmd_id']}")
     return body
 
 
-def parse_tv_program(reader: JceReader) -> TVProgram:
-    return TVProgram(
-        program_id=reader.read_string(0, default="") or "",
-        start_time_stamp=reader.read_long(1, default=0),
-        epg_time=reader.read_string(2, default="") or "",
-        name=reader.read_string(3, default="") or "",
-        copy_right=reader.read_int(4, default=0),
-        time_shift_flag=reader.read_int(5, default=0),
-        duration=reader.read_int(6, default=0),
-        pic_screen_flag=reader.read_int(7, default=0),
-        video_screen_flag=reader.read_int(8, default=0),
-    )
+def read_scalar_by_type(reader: JceReader, type_: int) -> int | str | float:
+    if type_ == TYPE_BYTE:
+        return struct.unpack(">b", reader._read(1))[0]
+    if type_ == TYPE_SHORT:
+        return struct.unpack(">h", reader._read(2))[0]
+    if type_ == TYPE_INT:
+        return struct.unpack(">i", reader._read(4))[0]
+    if type_ == TYPE_LONG:
+        return struct.unpack(">q", reader._read(8))[0]
+    if type_ == TYPE_STRING1:
+        size = reader._read(1)[0]
+        return reader._read(size).decode("utf-8", errors="replace")
+    if type_ == TYPE_STRING4:
+        size = struct.unpack(">i", reader._read(4))[0]
+        return reader._read(size).decode("utf-8", errors="replace")
+    if type_ == TYPE_ZERO:
+        return 0
+    raise JceDecodeError(f"unsupported scalar type: {type_}")
 
 
-def parse_tv_time_shift_program_response(data: bytes) -> TVTimeShiftProgramResponse:
+def scalar_to_int(value: int | str | float) -> int:
+    if isinstance(value, str):
+        return int(value) if value else 0
+    return int(value)
+
+
+def read_first_text_line_struct(reader: JceReader) -> str:
+    text = reader.read_string(0, default="") or ""
+    reader.skip_to_struct_end()
+    return text
+
+
+def parse_program_detail(data: bytes) -> TVShowProgram:
     reader = JceReader(data)
-    return TVTimeShiftProgramResponse(
-        errcode=reader.read_int(0, required=True),
-        errmsg=reader.read_string(1, default="") or "",
-        programs=reader.read_struct_list(2, parse_tv_program),
-        time_shift_flag=reader.read_int(3, default=0),
+    title = ""
+    display_time = ""
+    start_time_stamp = 0
+    duration = 0
+
+    while reader.pos < len(data):
+        type_, tag = reader.read_head()
+        if type_ == TYPE_STRUCT_END:
+            break
+        if tag == 0 and type_ == TYPE_STRUCT_BEGIN:
+            display_time = read_first_text_line_struct(reader)
+        elif tag == 1 and type_ == TYPE_STRUCT_BEGIN:
+            title = read_first_text_line_struct(reader)
+        elif tag == 7 and type_ in {TYPE_BYTE, TYPE_SHORT, TYPE_INT, TYPE_LONG, TYPE_STRING1, TYPE_STRING4, TYPE_ZERO}:
+            start_time_stamp = scalar_to_int(read_scalar_by_type(reader, type_))
+        elif tag == 8 and type_ in {TYPE_BYTE, TYPE_SHORT, TYPE_INT, TYPE_LONG, TYPE_STRING1, TYPE_STRING4, TYPE_ZERO}:
+            duration = scalar_to_int(read_scalar_by_type(reader, type_))
+        else:
+            reader.skip_field_by_type(type_)
+
+    return TVShowProgram(
+        title=title,
+        display_time=display_time,
+        start_time_stamp=start_time_stamp,
+        duration=duration,
     )
 
 
-def build_request(pid: str, request_id: int = 1, guid: str = DEFAULT_GUID) -> bytes:
-    jce_body = make_request_command(
-        pid=pid,
-        request_id=request_id,
-        cmd_id=CMD_TV_TIME_SHIFT_PROGRAM,
-        guid=guid,
-    )
-    return wrap_unified_protocol(
-        jce_body=jce_body,
-        request_id=request_id,
-        cmd_id=CMD_TV_TIME_SHIFT_PROGRAM,
-        guid=guid,
-    )
+def read_simple_list_bytes(reader: JceReader) -> bytes:
+    inner_type, _ = reader.read_head()
+    if inner_type != TYPE_BYTE:
+        raise JceDecodeError(f"invalid simple-list inner type: {inner_type}")
+    size_type, _ = reader.read_head()
+    size = scalar_to_int(read_scalar_by_type(reader, size_type))
+    return reader._read(size)
+
+
+def parse_program_item(reader: JceReader) -> Optional[TVShowProgram]:
+    detail: Optional[bytes] = None
+    while reader.pos < len(reader.data):
+        type_, tag = reader.read_head()
+        if type_ == TYPE_STRUCT_END:
+            break
+        if tag == 4 and type_ == TYPE_SIMPLE_LIST:
+            detail = read_simple_list_bytes(reader)
+        else:
+            reader.skip_field_by_type(type_)
+
+    if not detail:
+        return None
+    program = parse_program_detail(detail)
+    if not program.title or program.start_time_stamp <= 0:
+        return None
+    return program
+
+
+def parse_tvshowlist_response(body: bytes) -> list[TVShowProgram]:
+    reader = JceReader(body)
+    errcode = reader.read_int(0, default=0)
+    if errcode != 0:
+        raise JceDecodeError(f"TVShowList returned error: {errcode}")
+    if not reader.skip_to_tag(1):
+        return []
+    type_, _ = reader.read_head()
+    if type_ != TYPE_LIST:
+        raise JceDecodeError(f"expected programme list, got JCE type {type_}")
+
+    size_type, _ = reader.read_head()
+    size = scalar_to_int(read_scalar_by_type(reader, size_type))
+    programs: list[TVShowProgram] = []
+    for _ in range(size):
+        item_type, _ = reader.read_head()
+        if item_type != TYPE_STRUCT_BEGIN:
+            reader.skip_field_by_type(item_type)
+            continue
+        program = parse_program_item(reader)
+        if program is not None:
+            programs.append(program)
+    return programs
 
 
 def fetch_epg(
     pid: str,
+    day: str,
+    timestamp: int,
+    *,
     url: str = JACC_URL,
     timeout: float = 15.0,
     insecure: bool = False,
-) -> TVTimeShiftProgramResponse:
-    body = build_request(pid)
+    request_id: int = 44,
+    guid: str = DEFAULT_GUID,
+    raw_response: Optional[Path] = None,
+) -> list[TVShowProgram]:
+    body = build_request(pid, day, timestamp, request_id, guid)
     request = urllib.request.Request(
         url,
         data=body,
@@ -584,54 +682,39 @@ def fetch_epg(
     context = ssl._create_unverified_context() if insecure else None
     with urllib.request.urlopen(request, timeout=timeout, context=context) as response:
         response_data = response.read()
+    if raw_response:
+        raw_response.parent.mkdir(parents=True, exist_ok=True)
+        raw_response.write_bytes(response_data)
 
-    command_data = unwrap_unified_protocol(response_data)
-    tv_response_body = parse_response_command(command_data)
-    parsed = parse_tv_time_shift_program_response(tv_response_body)
-    if parsed.errcode != 0:
-        raise JceDecodeError(f"EPG API returned {parsed.errcode}: {parsed.errmsg}")
-    return parsed
-
-
-def normalize_timestamp(value: int) -> int:
-    if value > 10_000_000_000:
-        return value // 1000
-    return value
+    response_command = unwrap_unified_protocol(response_data)
+    response_body = parse_response_command(response_command)
+    return parse_tvshowlist_response(response_body)
 
 
 def xmltv_time(timestamp: int) -> str:
-    dt = datetime.fromtimestamp(normalize_timestamp(timestamp), CN_TZ)
-    return dt.strftime("%Y%m%d%H%M%S %z")
-
-
-def iter_program_stops(programs: list[TVProgram]) -> Iterable[tuple[TVProgram, Optional[int]]]:
-    ordered = sorted(
-        (program for program in programs if program.start_time_stamp > 0),
-        key=lambda program: normalize_timestamp(program.start_time_stamp),
-    )
-    for index, program in enumerate(ordered):
-        start = normalize_timestamp(program.start_time_stamp)
-        stop: Optional[int] = None
-        if program.duration > 0:
-            stop = start + program.duration
-        elif index + 1 < len(ordered):
-            next_start = normalize_timestamp(ordered[index + 1].start_time_stamp)
-            if next_start > start:
-                stop = next_start
-        yield program, stop
+    return datetime.fromtimestamp(timestamp, CN_TZ).strftime("%Y%m%d%H%M%S %z")
 
 
 def write_xmltv(
-    programs: list[TVProgram],
+    programs: list[TVShowProgram],
     output: Path,
+    *,
     channel_id: str = CCTV8K_CHANNEL_ID,
     channel_name: str = CCTV8K_CHANNEL_NAME,
 ) -> None:
-    tv = ET.Element("tv", {"generator-info-name": "my-tv Y_JCE EPG"})
+    tv = ET.Element("tv", {"generator-info-name": "my-tv TVShowList Y_JCE EPG"})
     channel = ET.SubElement(tv, "channel", {"id": channel_id})
     ET.SubElement(channel, "display-name", {"lang": "zh"}).text = channel_name
 
-    for program, stop in iter_program_stops(programs):
+    for index, program in enumerate(programs):
+        stop = None
+        if program.duration > 0:
+            stop = program.start_time_stamp + program.duration
+        elif index + 1 < len(programs):
+            next_start = programs[index + 1].start_time_stamp
+            if next_start > program.start_time_stamp:
+                stop = next_start
+
         attrs = {
             "start": xmltv_time(program.start_time_stamp),
             "channel": channel_id,
@@ -639,41 +722,43 @@ def write_xmltv(
         if stop is not None:
             attrs["stop"] = xmltv_time(stop)
         item = ET.SubElement(tv, "programme", attrs)
-        ET.SubElement(item, "title", {"lang": "zh"}).text = program.name or program.epg_time
-        if program.epg_time:
-            ET.SubElement(item, "sub-title", {"lang": "zh"}).text = program.epg_time
-        if program.program_id:
-            ET.SubElement(item, "episode-num", {"system": "dd_progid"}).text = (
-                program.program_id
-            )
+        ET.SubElement(item, "title", {"lang": "zh"}).text = program.title
+        if program.display_time:
+            ET.SubElement(item, "sub-title", {"lang": "zh"}).text = program.display_time
 
     if hasattr(ET, "indent"):
         ET.indent(tv, space="  ")
-    tree = ET.ElementTree(tv)
     output.parent.mkdir(parents=True, exist_ok=True)
-    tree.write(output, encoding="utf-8", xml_declaration=True)
+    ET.ElementTree(tv).write(output, encoding="utf-8", xml_declaration=True)
 
 
-async def get_epgs_ysp_jce(channel: dict) -> dict:
+async def get_epgs_ysp_jce(channel: dict, dt: datetime) -> dict:
     epgs = []
     msg = ''
     success = 1
     channel_id = channel['id']
     pid = str(channel.get('id0') or CCTV8K_PID)
+    day = dt.strftime("%Y-%m-%d")
+    timestamp = default_timestamp()
     try:
-        response = await asyncio.to_thread(fetch_epg, pid)
-        for program, stop in iter_program_stops(response.programs):
+        programs = await asyncio.to_thread(fetch_epg, pid, day, timestamp)
+        programs = sorted(programs, key=lambda program: program.start_time_stamp)
+        for index, program in enumerate(programs):
+            stop = None
+            if program.duration > 0:
+                stop = program.start_time_stamp + program.duration
+            elif index + 1 < len(programs):
+                next_start = programs[index + 1].start_time_stamp
+                if next_start > program.start_time_stamp:
+                    stop = next_start
             if stop is None:
                 continue
-            title = program.name or program.epg_time
             epg = {
                 'channel_id': channel_id,
-                'starttime': datetime.fromtimestamp(
-                    normalize_timestamp(program.start_time_stamp), CN_TZ
-                ),
+                'starttime': datetime.fromtimestamp(program.start_time_stamp, CN_TZ),
                 'endtime': datetime.fromtimestamp(stop, CN_TZ),
-                'title': title,
-                'desc': program.epg_time if program.name else '',
+                'title': program.title,
+                'desc': '',
             }
             epgs.append(epg)
     except Exception as e:
@@ -689,26 +774,33 @@ async def get_epgs_ysp_jce(channel: dict) -> dict:
     return ret
 
 
+def default_day() -> str:
+    return datetime.now(CN_TZ).strftime("%Y-%m-%d")
+
+
+def default_timestamp() -> int:
+    return int(datetime.now(CN_TZ).timestamp())
+
+
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Fetch CCTV8K Y_JCE EPG and save it as XMLTV."
+        description="Fetch CCTV8K EPG through TVShowList Y_JCE and save XMLTV."
     )
     parser.add_argument("--pid", default=CCTV8K_PID, help="YSP pid, default: CCTV8K")
+    parser.add_argument("--day", default=default_day(), help="Day parameter, YYYY-MM-DD")
+    parser.add_argument("--timestamp", type=int, default=0)
     parser.add_argument("--url", default=JACC_URL, help="Y_JCE endpoint URL")
-    parser.add_argument(
-        "-o",
-        "--output",
-        type=Path,
-        default=Path("cctv8k_epg.xml"),
-        help="XMLTV output path",
-    )
+    parser.add_argument("-o", "--output", type=Path, default=Path("cctv8k_tvshowlist_epg.xml"))
     parser.add_argument("--channel-id", default=CCTV8K_CHANNEL_ID)
     parser.add_argument("--channel-name", default=CCTV8K_CHANNEL_NAME)
     parser.add_argument("--timeout", type=float, default=15.0)
+    parser.add_argument("--request-id", type=int, default=44)
+    parser.add_argument("--guid", default=DEFAULT_GUID)
+    parser.add_argument("--raw-response", type=Path, help="Optional path to save raw response .bin")
     parser.add_argument(
         "--insecure",
         action="store_true",
-        help="Disable TLS certificate verification, useful if local certificates are broken.",
+        help="Disable TLS certificate verification.",
     )
     return parser.parse_args(argv)
 
@@ -716,23 +808,35 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
     try:
-        response = fetch_epg(
+        programs = fetch_epg(
             pid=args.pid,
+            day=args.day,
+            timestamp=args.timestamp,
             url=args.url,
             timeout=args.timeout,
             insecure=args.insecure,
+            request_id=args.request_id,
+            guid=args.guid,
+            raw_response=args.raw_response,
         )
         write_xmltv(
-            response.programs,
+            programs,
             args.output,
             channel_id=args.channel_id,
             channel_name=args.channel_name,
         )
-    except (JceDecodeError, OSError, urllib.error.URLError) as exc:
-        print(f"Failed to fetch CCTV8K EPG: {exc}", file=sys.stderr)
+    except (JceDecodeError, OSError, urllib.error.URLError, ValueError) as exc:
+        print(f"Failed to fetch TVShowList EPG: {exc}", file=sys.stderr)
         return 1
 
-    print(f"Wrote {len(response.programs)} programmes to {args.output}")
+    if programs:
+        print(
+            f"Wrote {len(programs)} programmes to {args.output} "
+            f"({xmltv_time(programs[0].start_time_stamp)} -> "
+            f"{xmltv_time(programs[-1].start_time_stamp + max(programs[-1].duration, 0))})"
+        )
+    else:
+        print(f"Wrote 0 programmes to {args.output}")
     return 0
 
 
