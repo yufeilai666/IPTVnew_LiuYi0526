@@ -56,6 +56,7 @@ MAX_RETRIES = 5
 MODE_PLAIN = 'plain'
 MODE_DATE = 'date'
 MODE_OFFSET = 'offset'
+MODE_OFFSETS = 'offsets'
 
 THREE_DAY_OFFSETS = (-1, 0, 1)
 
@@ -64,7 +65,7 @@ EPG_SOURCE_CONFIGS = {
     'tvmao': (get_epgs_tvmao, MODE_DATE, range(-6, 2)),
     'radiocn': (get_epgs_radiocn, MODE_DATE, range(-6, 2)),
     'xjtvs': (get_epgs_xjtvs, MODE_DATE, THREE_DAY_OFFSETS),
-    'nowtv': (get_epgs_nowtv, MODE_DATE, THREE_DAY_OFFSETS),
+    'nowtv': (get_epgs_nowtv, MODE_OFFSETS, THREE_DAY_OFFSETS),
     'mod': (get_epgs_mod, MODE_DATE, THREE_DAY_OFFSETS),
     'hami': (get_epgs_hami, MODE_DATE, THREE_DAY_OFFSETS),
     'ETTVAmerica': (get_epgs_ettvamerica, MODE_DATE, THREE_DAY_OFFSETS),
@@ -116,6 +117,8 @@ def _iter_fetch_targets(mode, offsets, today):
     elif mode == MODE_OFFSET:
         for offset in offsets:
             yield offset
+    elif mode == MODE_OFFSETS:
+        yield offsets
     else:
         raise ValueError(f'Unsupported EPG mode: {mode}')
 
@@ -1217,8 +1220,8 @@ if __name__ == '__main__':
         {'id': 'HOY_76', 'name': 'HOY 國際財經台', 'id0': '76', 'source': 'hoy'},
         {'id': 'HOY_77', 'name': 'HOY TV', 'id0': '77', 'source': 'hoy'},
         {'id': 'HOY_78', 'name': 'HOY TV 資訊台', 'id0': '78', 'source': 'hoy'},
-        {'id': 'nowtv_96', 'name': 'ViuTVsix', 'id0': '96', 'source': 'nowtv'},
-        {'id': 'nowtv_99', 'name': 'ViuTV', 'id0': '99', 'source': 'nowtv'},
+        {'id': 'nowtv_096', 'name': 'ViuTVsix', 'id0': '096', 'source': 'nowtv'},
+        {'id': 'nowtv_099', 'name': 'ViuTV', 'id0': '099', 'source': 'nowtv'},
         {'id': 'nowtv_102', 'name': 'Viu 頻道', 'id0': '102', 'source': 'nowtv'},
         {'id': 'nowtv_105', 'name': 'Now華劇台', 'id0': '105', 'source': 'nowtv'},
         {'id': 'nowtv_108', 'name': 'NowJelli', 'id0': '108', 'source': 'nowtv'},
@@ -1232,7 +1235,7 @@ if __name__ == '__main__':
         {'id': 'nowtv_133', 'name': 'Now 爆谷台', 'id0': '133', 'source': 'nowtv'},
         {'id': 'nowtv_138', 'name': 'Now爆谷星影台', 'id0': '138', 'source': 'nowtv'},
         {'id': 'nowtv_155', 'name': 'tvN', 'id0': '410288', 'source': 'epg.pw'},
-        {'id': 'nowtv_200', 'name': '熊貓 TV', 'id0': '410292', 'source': 'epg.pw'},
+        {'id': 'nowtv_200', 'name': '熊貓 TV', 'id0': '200', 'source': 'nowtv'},
         {'id': 'nowtv_208', 'name': 'Discovery Asia', 'id0': '208', 'source': 'nowtv'},
         {'id': 'nowtv_209', 'name': 'Discovery Channel', 'id0': '209', 'source': 'nowtv'},
         {'id': 'nowtv_210', 'name': '動物星球頻道', 'id0': '210', 'source': 'nowtv'},
@@ -1243,6 +1246,11 @@ if __name__ == '__main__':
         {'id': 'nowtv_218', 'name': 'Love Nature 4K', 'id0': '218', 'source': 'nowtv'},
         {'id': 'nowtv_221', 'name': '戶外頻道', 'id0': '221', 'source': 'nowtv'},
         {'id': 'nowtv_316', 'name': 'CNN 國際新聞網絡', 'id0': '316', 'source': 'nowtv'},
+        {'id': 'nowtv_321', 'name': 'Bloomberg Television', 'id0': '321', 'source': 'nowtv'},
+        {'id': 'nowtv_325', 'name': '半島電視台英語頻道', 'id0': '325', 'source': 'nowtv'},
+        {'id': 'nowtv_328', 'name': 'NHK WORLD-JAPAN', 'id0': '328', 'source': 'nowtv'},
+        {'id': 'nowtv_329', 'name': 'RT', 'id0': '329', 'source': 'nowtv'},
+        {'id': 'nowtv_330', 'name': '中國環球電視網', 'id0': '330', 'source': 'nowtv'},
         {'id': 'nowtv_331', 'name': 'Now直播台', 'id0': '331', 'source': 'nowtv'},
         {'id': 'nowtv_332', 'name': 'Now新聞台', 'id0': '332', 'source': 'nowtv'},
         {'id': 'nowtv_333', 'name': 'Now財經台', 'id0': '333', 'source': 'nowtv'},
@@ -1253,6 +1261,15 @@ if __name__ == '__main__':
         {'id': 'nowtv_517', 'name': 'ROCK Entertainment', 'id0': '410367', 'source': 'epg.pw'},
         {'id': 'nowtv_525', 'name': 'Lifetime', 'id0': '410368', 'source': 'epg.pw'},
         {'id': 'nowtv_538', 'name': '中天亞洲台', 'id0': '538', 'source': 'nowtv'},
+        {'id': 'nowtv_540', 'name': '深圳衛視', 'id0': '540', 'source': 'nowtv'},
+        {'id': 'nowtv_541', 'name': 'CCTV-1', 'id0': '541', 'source': 'nowtv'},
+        {'id': 'nowtv_542', 'name': 'CCTV-4', 'id0': '542', 'source': 'nowtv'},
+        {'id': 'nowtv_543', 'name': '大灣區衛視', 'id0': '543', 'source': 'nowtv'},
+        {'id': 'nowtv_545', 'name': '中央電視台新聞頻道', 'id0': '545', 'source': 'nowtv'},
+        {'id': 'nowtv_548', 'name': '鳳凰衛視中文台', 'id0': '548', 'source': 'nowtv'},
+        {'id': 'nowtv_551', 'name': '東方衛視國際頻道', 'id0': '551', 'source': 'nowtv'},
+        {'id': 'nowtv_553', 'name': '三沙衛視', 'id0': '553', 'source': 'nowtv'},
+        {'id': 'nowtv_561', 'name': 'ABC Australia', 'id0': '561', 'source': 'nowtv'},
         {'id': 'nowtv_611', 'name': 'Now Sports 4K 1', 'id0': '611', 'source': 'nowtv'},
         {'id': 'nowtv_612', 'name': 'Now Sports 4K 2', 'id0': '410385', 'source': 'epg.pw'},
         {'id': 'nowtv_613', 'name': 'Now Sports 4K 3', 'id0': '410386', 'source': 'epg.pw'},
@@ -1294,6 +1311,7 @@ if __name__ == '__main__':
         {'id': 'nowtv_680', 'name': 'Now Sports Plus', 'id0': '680', 'source': 'nowtv'},
         {'id': 'nowtv_683', 'name': 'Now Golf 2', 'id0': '683', 'source': 'nowtv'},
         {'id': 'nowtv_684', 'name': 'Now Golf 3', 'id0': '684', 'source': 'nowtv'},
+        {'id': 'nowtv_688', 'name': 'Lucky 688', 'id0': '688', 'source': 'nowtv'},
         {'id': 'tvb_CWIN', 'name': 'SUPER FREE (免費)', 'id0': '368376', 'source': 'epg.pw'},
         {'id': 'tvb_SVAR', 'name': 'SUPER獎門人 (免費)', 'id0': '430854', 'source': 'epg.pw'},
         {'id': 'tvb_SEYT', 'name': 'SUPER EYT (免費)', 'id0': '430550', 'source': 'epg.pw'},
