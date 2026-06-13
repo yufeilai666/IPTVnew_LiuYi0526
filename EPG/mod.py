@@ -2,52 +2,73 @@
 import httpx
 import datetime
 import os
+import re
 from bs4 import BeautifulSoup
 import asyncio
 
 
-async def get_epgs_mod(channel, dt):
+async def get_epgs_mod(channel):
     epgs = []
     msg = ''
     success = 1
     channel_id = channel['id']
     channel_id0 = channel['id0']
-    days = (dt - datetime.datetime.now().date()).days
-    url = 'https://modweb2.chtmod.tv/tv/channel.php?id=%s&d=%s' % (
-        channel_id0, days)  # d=0表示当天，至少能获取最近七天数据  http://mod.cht.com.tw/tv/channel.php?id=6&d=2
     try:
-        async with httpx.AsyncClient() as client:
-            res = await client.get(url)
+        async with httpx.AsyncClient(verify=False, follow_redirects=True) as client:
+            res = await client.get('https://modp.cht.com.tw/modinfo/epginfob.php', params={'w': 0, 'id': channel_id0}, timeout=10)
         res.encoding = 'utf-8'
         soup = BeautifulSoup(res.text, 'html.parser')
-        lis = soup.select('ul.striped-time-table > li')
-        starttime = datetime.datetime(dt.year, dt.month, dt.day, 0, 0) + datetime.timedelta(days=1)
-        timestr0 = 2400
-        for li in lis[::-1]:
-            title = li.select('h4')[0].text.replace('\t', '').replace('\r', '').replace('\n', '').strip()
-            endtime = starttime
-            timestr = li.select('time.time')[0].text.strip().replace(':', '')
-            if int(timestr) < int(timestr0):
-                starttime = datetime.datetime(dt.year, dt.month, dt.day, int(timestr[:2]), int(timestr[-2:]))
+        epgs = []
+        current_date = None
+        for epgday in soup.find_all('div', class_='epgdays'):
+            for item in epgday.find_all('div', class_='item', recursive=False):
+                date_match = re.search(r'(\d{4}-\d{2}-\d{2})', item.get_text(' ', strip=True))
+                if date_match:
+                    current_date = datetime.date.fromisoformat(date_match.group(1))
+                if current_date is None:
+                    continue
+
+                for row in item.find_all("div", class_=["past", "now", "future"]):
+                    time_node = row.select_one('div.time')
+                    title_node = row.select_one('div.channelTitle')
+                    time_match = re.search(r'(\d{1,2}):(\d{2})', time_node.get_text(strip=True))
+
+                    hour = int(time_match.group(1))
+                    minute = int(time_match.group(2))
+                    starttime = datetime.datetime(
+                        current_date.year,
+                        current_date.month,
+                        current_date.day,
+                        hour,
+                        minute,
+                    )
+                    epg = {
+                        'channel_id': channel_id,
+                        'starttime': starttime,
+                        'endtime': None,
+                        'title': title_node.get_text(strip=True),
+                        'desc': '',
+                        'program_date': current_date
+                    }
+                    epgs.append(epg)
+                    # print(epg)
+
+        for index, epg in enumerate(epgs):
+            if index + 1 < len(epgs) and epgs[index + 1]['starttime'] > epg['starttime']:
+                epg['endtime'] = epgs[index + 1]['starttime']
             else:
-                starttime = datetime.datetime(dt.year, dt.month, dt.day, int(timestr[:2]), int(timestr[-2:])) - datetime.timedelta(days=1)
-            timestr0 = timestr
-            epg = {
-                'channel_id': channel_id,
-                'starttime': starttime,
-                'endtime': endtime,
-                'title': title,
-                'desc': '',
-                'program_date': dt,
-            }
-            epgs.append(epg)
+                next_midnight = datetime.datetime.combine(
+                    epg['program_date'] + datetime.timedelta(days=1),
+                    datetime.time.min,
+                )
+                epg['endtime'] = next_midnight if next_midnight > epg['starttime'] else epg['starttime'] + datetime.timedelta(minutes=30)
     except Exception as e:
         success = 0
         spidername = os.path.basename(__file__).split('.')[0]
         msg = 'spider-%s-%s' % (channel_id, e)
     ret = {
         'success': success,
-        'epgs': epgs[::-1],
+        'epgs': epgs,
         'msg': msg,
         'ban':0,
     }
