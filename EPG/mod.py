@@ -106,5 +106,6 @@ async def get_channels_mod():
             print(div)
     return channels
 
-# print(get_epgs_mod({'name': '006 民視', 'id': '006', 'source': 'mod'}, datetime.datetime.now().date()))
-# asyncio.run(get_channels_mod())
+if __name__ == '__main__':
+    # print(get_epgs_mod({'name': '006 民視', 'id': '006', 'source': 'mod'}, datetime.datetime.now().date()))
+    asyncio.run(get_channels_mod())

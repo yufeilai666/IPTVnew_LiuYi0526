@@ -1461,6 +1461,7 @@ if __name__ == '__main__':
         {'id': 'mod_600', 'name': '600 視納華仁紀實台', 'id0': '600', 'source': 'mod'},
         {'id': 'mod_601', 'name': '601 影迷數位紀實台', 'id0': '601', 'source': 'mod'},
         {'id': 'mod_610', 'name': '610 美亞電影台', 'id0': '610', 'source': 'mod'},
+        {'id': 'mod_616', 'name': '616 Warner TV', 'id0': '616', 'source': 'mod'},
         {'id': 'mod_619', 'name': '619 amc電影台', 'id0': '619', 'source': 'mod'},
         {'id': 'mod_626', 'name': '626 CatchPlay電影台', 'id0': '626', 'source': 'mod'},
         {'id': 'mod_627', 'name': '627 CinemaWorld', 'id0': '627', 'source': 'mod'},
