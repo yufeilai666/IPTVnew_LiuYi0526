@@ -49,6 +49,7 @@ from starhub import *
 from btzx import *
 from astro import *
 from ysp_jce import get_epgs_ysp_jce
+from nhk import get_epgs_nhk
 
 beijing_tz = pytz.timezone('Asia/Shanghai')
 
@@ -105,6 +106,7 @@ EPG_SOURCE_CONFIGS = {
     'btzx': (get_epgs_btzx, MODE_DATE, THREE_DAY_OFFSETS),
     'astro': (get_epgs_astro, MODE_DATE, (0, 1, 2)),
     'YSP_JCE': (get_epgs_ysp_jce, MODE_DATE, range(-6, 2)),
+    'nhk': (get_epgs_nhk, MODE_DATE, THREE_DAY_OFFSETS),
 }
 
 
@@ -1742,7 +1744,9 @@ if __name__ == '__main__':
         {'id': 'epgpw_6580', 'name': 'RT News', 'id0': '6580', 'source': 'epg.pw'},
         {'id': 'epgpw_6856', 'name': 'TVP World', 'id0': '6856', 'source': 'epg.pw'},
         {'id': 'epgpw_7374', 'name': 'RT Д English', 'id0': '7374', 'source': 'epg.pw'},
-        {'id': 'epgpw_10770', 'name': 'NHK BS4K', 'id0': '10770', 'source': 'epg.pw'},
+        {'id': 'nhk_g', 'name': 'NHK総合', 'id0': 'g1', 'source': 'nhk'},
+        {'id': 'nhk_bsp4k', 'name': 'NHK BSP4K', 'id0': 's5', 'source': 'nhk'},
+        {'id': 'nhk_bs8k', 'name': 'NHK BS8K', 'id0': 's6', 'source': 'nhk'},
         {'id': 'epgpw_12162', 'name': 'BBC NEWS HD', 'id0': '12162', 'source': 'epg.pw'},
         {'id': 'epgpw_12523', 'name': 'TRT World HD', 'id0': '12523', 'source': 'epg.pw'},
         {'id': 'epgpw_76619', 'name': 'Eurosport 1', 'id0': '76619', 'source': 'epg.pw'},
