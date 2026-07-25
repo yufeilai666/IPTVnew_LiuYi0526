@@ -1,13 +1,30 @@
-import httpx
-import datetime
 import asyncio
-import os
 import datetime
+import os
 import time
-import pytz
-import urllib
+from urllib.parse import parse_qs, urlparse
 
-async def astro_get_access_token():
+import httpx
+import pytz
+
+
+ASTRO_AUTH_URL = "https://sg-sg-sg.astro.com.my:9443/oauth2/authorize"
+ASTRO_GRID_URL = "https://sg-sg-sg.astro.com.my:9443/ctap/r1.6.0/shared/grid"
+ASTRO_CHANNELS_URL = "https://sg-sg-sg.astro.com.my:9443/ctap/r1.6.0/shared/channels"
+ASTRO_TIMEOUT = httpx.Timeout(30.0, connect=15.0)
+
+_ASTRO_ACCESS_TOKEN = None
+_ASTRO_TOKEN_EXPIRES_AT = 0.0
+_ASTRO_TOKEN_REQUEST = None
+
+
+def _clear_astro_access_token():
+    global _ASTRO_ACCESS_TOKEN, _ASTRO_TOKEN_EXPIRES_AT
+    _ASTRO_ACCESS_TOKEN = None
+    _ASTRO_TOKEN_EXPIRES_AT = 0.0
+
+
+async def _request_astro_access_token():
     params = {
         "client_id": "browser",
         "state": "guestUserLogin",
@@ -20,17 +37,57 @@ async def astro_get_access_token():
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:149.0) Gecko/20100101 Firefox/149.0",
         "Referer": "https://astrogo.astro.com.my/",
     }
-    async with httpx.AsyncClient() as client:
-        res = await client.get("https://sg-sg-sg.astro.com.my:9443/oauth2/authorize", headers=headers, params=params, follow_redirects=False)
+    async with httpx.AsyncClient(timeout=ASTRO_TIMEOUT) as client:
+        res = await client.get(
+            ASTRO_AUTH_URL,
+            headers=headers,
+            params=params,
+            follow_redirects=False,
+        )
+    if res.is_error:
+        res.raise_for_status()
     location = res.headers.get("Location")
-    parsed = urllib.parse.urlparse(location)
-    fragment = parsed.fragment
-    params = {}
-    for item in fragment.split("&"):
-        if "=" in item:
-            key, value = item.split("=", 1)
-            params[key] = value
-    access_token = params.get("access_token")
+    if not location:
+        raise ValueError("Astro authorization response has no Location header")
+
+    fragment_params = parse_qs(urlparse(location).fragment)
+    access_tokens = fragment_params.get("access_token", [])
+    if not access_tokens:
+        raise ValueError("Astro authorization response has no access token")
+
+    try:
+        expires_in = float(fragment_params.get("expires_in", [300])[0])
+    except (TypeError, ValueError):
+        expires_in = 300
+    expires_at = time.monotonic() + max(expires_in - 60, 0)
+    return access_tokens[0], expires_at
+
+
+async def astro_get_access_token():
+    global _ASTRO_ACCESS_TOKEN, _ASTRO_TOKEN_EXPIRES_AT, _ASTRO_TOKEN_REQUEST
+
+    if (
+        _ASTRO_ACCESS_TOKEN
+        and time.monotonic() < _ASTRO_TOKEN_EXPIRES_AT
+    ):
+        return _ASTRO_ACCESS_TOKEN
+
+    task = _ASTRO_TOKEN_REQUEST
+    if task is None:
+        task = asyncio.create_task(_request_astro_access_token())
+        _ASTRO_TOKEN_REQUEST = task
+
+    try:
+        access_token, expires_at = await task
+    except Exception:
+        if _ASTRO_TOKEN_REQUEST is task:
+            _ASTRO_TOKEN_REQUEST = None
+        raise
+
+    _ASTRO_ACCESS_TOKEN = access_token
+    _ASTRO_TOKEN_EXPIRES_AT = expires_at
+    if _ASTRO_TOKEN_REQUEST is task:
+        _ASTRO_TOKEN_REQUEST = None
     return access_token
 
 
@@ -40,39 +97,48 @@ async def get_epgs_astro(channel, dt):
     success = 1
     channel_id = channel['id']
     channel_id0 = channel['id0']
-    starttime = datetime.datetime.combine(dt, datetime.time.min).replace(tzinfo=datetime.timezone(datetime.timedelta(hours=8))).astimezone(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
-    access_token = await astro_get_access_token()
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:149.0) Gecko/20100101 Firefox/149.0",
-        "Referer": "https://astrogo.astro.com.my/",
-        "Authorization": f"Bearer {access_token}",
-        "Accept-Language": "zh"
-    }
-    params = {
-        "startDateTime": starttime,
-        "channelId": channel_id0,
-        "limit": 1,
-        "genreId": "",
-        "isPlayable": "true",
-        "duration": "24",
-        "clientToken": "v:1!r:80800!ur:GUEST_REGION!community:Malaysia%20Live!t:k!dt:PC!f:Astro_unmanaged!pd:CHROME-FF!pt:Adults"
-    }
     try:
-        async with httpx.AsyncClient() as client:
-            res = await client.get("https://sg-sg-sg.astro.com.my:9443/ctap/r1.6.0/shared/grid", headers=headers, params=params)
+        starttime = (
+            datetime.datetime.combine(dt, datetime.time.min)
+            .replace(tzinfo=datetime.timezone(datetime.timedelta(hours=8)))
+            .astimezone(datetime.timezone.utc)
+            .strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        )
+        access_token = await astro_get_access_token()
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:149.0) Gecko/20100101 Firefox/149.0",
+            "Referer": "https://astrogo.astro.com.my/",
+            "Authorization": f"Bearer {access_token}",
+            "Accept-Language": "zh"
+        }
+        params = {
+            "startDateTime": starttime,
+            "channelId": channel_id0,
+            "limit": 1,
+            "genreId": "",
+            "isPlayable": "true",
+            "duration": "24",
+            "clientToken": "v:1!r:80800!ur:GUEST_REGION!community:Malaysia%20Live!t:k!dt:PC!f:Astro_unmanaged!pd:CHROME-FF!pt:Adults"
+        }
+        async with httpx.AsyncClient(timeout=ASTRO_TIMEOUT) as client:
+            res = await client.get(ASTRO_GRID_URL, headers=headers, params=params)
+        res.raise_for_status()
         res.encoding = 'utf-8'
         data = res.json()
-        for channel in data.get("channels"):
-            schedules = channel.get("schedule", [])
+        channels = data.get("channels")
+        if not isinstance(channels, list):
+            raise ValueError("Astro grid response has no channels")
+        for astro_channel in channels:
+            schedules = astro_channel.get("schedule", [])
             for schedule in schedules:
                 title = schedule.get('title', '')
                 description = schedule.get('synopsis', '')
                 episode_number = schedule.get("episodeNumber")
                 if episode_number:
                     title += f" Ep{episode_number}"
-                parentalRating = schedule.get("parentalRating", {}).get("name")
-                if parentalRating:
-                    title += f"[{parentalRating}]"
+                parental_rating = (schedule.get("parentalRating") or {}).get("name")
+                if parental_rating:
+                    title += f"[{parental_rating}]"
                 start_time = datetime.datetime.fromisoformat(schedule.get('startDateTime').replace('Z', '+00:00')).astimezone(pytz.timezone('Asia/Shanghai'))
                 end_time = start_time + datetime.timedelta(seconds=schedule.get("duration"))
                 epg = {
@@ -85,9 +151,14 @@ async def get_epgs_astro(channel, dt):
                 epgs.append(epg)
                 # print(epg)
     except Exception as e:
+        if (
+            isinstance(e, httpx.HTTPStatusError)
+            and e.response.status_code in (401, 403)
+        ):
+            _clear_astro_access_token()
         success = 0
         spidername = os.path.basename(__file__).split('.')[0]
-        msg = 'spider-%s-%s' % (spidername, e)
+        msg = 'spider-%s-%s-%s' % (spidername, type(e).__name__, e)
     ret = {
         'success': success,
         'epgs': epgs,
@@ -108,8 +179,9 @@ async def get_channels_astro():
         "Authorization": f"Bearer {access_token}",
         "Accept-Language": "zh"
     }
-    async with httpx.AsyncClient() as client:
-            res = await client.get("https://sg-sg-sg.astro.com.my:9443/ctap/r1.6.0/shared/channels", params=params, headers=headers)
+    async with httpx.AsyncClient(timeout=ASTRO_TIMEOUT) as client:
+        res = await client.get(ASTRO_CHANNELS_URL, params=params, headers=headers)
+    res.raise_for_status()
     res.encoding = 'utf-8'
     data = res.json()
     for channel in data.get("channels", []):
