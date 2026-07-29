@@ -1443,6 +1443,7 @@ if __name__ == '__main__':
         {'id': 'mod_210', 'name': '210 TRACE Sport Stars', 'id0': '210', 'source': 'mod'},
         {'id': 'mod_212', 'name': '212 博斯運動一台', 'id0': '212', 'source': 'mod'},
         {'id': 'mod_213', 'name': '213 博斯運動二台', 'id0': '213', 'source': 'mod'},
+        {'id': 'mod_216', 'name': '216 EUROSPORT', 'id0': '216', 'source': 'mod'},
         {'id': 'mod_310', 'name': '310 中視菁采台', 'id0': '310', 'source': 'mod'},
         {'id': 'mod_316', 'name': '316 民視第一台', 'id0': '316', 'source': 'mod'},
         {'id': 'mod_317', 'name': '317 民視台灣台', 'id0': '317', 'source': 'mod'},
