@@ -50,6 +50,7 @@ from btzx import *
 from astro import *
 from ysp_jce import get_epgs_ysp_jce
 from nhk import get_epgs_nhk
+from singtel import get_epgs_singtel
 
 beijing_tz = pytz.timezone('Asia/Shanghai')
 
@@ -107,6 +108,7 @@ EPG_SOURCE_CONFIGS = {
     'astro': (get_epgs_astro, MODE_DATE, (0, 1, 2)),
     'YSP_JCE': (get_epgs_ysp_jce, MODE_DATE, range(-6, 2)),
     'nhk': (get_epgs_nhk, MODE_DATE, THREE_DAY_OFFSETS),
+    'singtel': (get_epgs_singtel, MODE_DATE, THREE_DAY_OFFSETS),
 }
 
 
@@ -1753,6 +1755,16 @@ if __name__ == '__main__':
         {'id': 'starhubtvplus_859', 'name': 'TVB Xing He', 'id0': '8a0cfe88-6627-49e8-8eed-a2f73e609b5d', 'source': 'starhub'},
         {'id': 'starhubtvplus_868', 'name': 'Celestial Movies HD', 'id0': 'b8b921c8-3798-40b7-aab9-cb2eca3a5159', 'source': 'starhub'},
         {'id': 'starhubtvplus_869', 'name': 'CCM', 'id0': 'd2bac03e-7024-48be-83b2-d56cc3852a7c', 'source': 'starhub'},
+        {'id': 'singtel_5002', 'name': 'Ch 5 (HD)', 'id0': '5002', 'source': 'singtel'},
+        {'id': 'singtel_5003', 'name': 'Ch 8 (HD)', 'id0': '5003', 'source': 'singtel'},
+        {'id': 'singtel_5006', 'name': 'CNA', 'id0': '5006', 'source': 'singtel'},
+        {'id': 'singtel_5007', 'name': 'MediaCorp Ch U', 'id0': '5007', 'source': 'singtel'},
+        {'id': 'singtel_5513', 'name': 'ONE HD (Mandarin)', 'id0': '5513', 'source': 'singtel'},
+        {'id': 'singtel_5521', 'name': 'ETTV Asia (HD)', 'id0': '5521', 'source': 'singtel'},
+        {'id': 'singtel_5561', 'name': 'ETTV Asia News (HD)', 'id0': '5561', 'source': 'singtel'},
+        {'id': 'singtel_6571', 'name': 'CM+', 'id0': '6571', 'source': 'singtel'},
+        {'id': 'singtel_5580', 'name': 'CCM', 'id0': '5580', 'source': 'singtel'},
+        {'id': 'singtel_5585', 'name': 'Celestial Movies(HD)', 'id0': '5585', 'source': 'singtel'},
         {'id': 'epgpw_6580', 'name': 'RT News', 'id0': '6580', 'source': 'epg.pw'},
         {'id': 'epgpw_6856', 'name': 'TVP World', 'id0': '6856', 'source': 'epg.pw'},
         {'id': 'epgpw_7374', 'name': 'RT Д English', 'id0': '7374', 'source': 'epg.pw'},
