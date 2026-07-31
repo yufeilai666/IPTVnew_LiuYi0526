@@ -12,10 +12,33 @@ async def get_epgs_wisetv(channel, dt):
     dt_str = dt.strftime('%Y%m%d')
     channel_id = channel['id']
     channel_id0 = channel['id0']
+    android_id = secrets.token_hex(8)
+    headers = {
+        "x-bindcp": "",
+        "x-appcode": "503",
+        "x-bindarea": "",
+        "User-Agent": "WiseTVAndroid/VersionName:7.4.5(VersionCode:503; SystemInt:32) okhttp3(3.12.12)",
+        "ak": "HyQuy347BBv9En+0VZ8ToA==",
+        "x-rec": "on",
+        "x-sysver": "12",
+        "x-userid": "",
+        "x-phonever": "M2011K2C",
+        "x-phoneno": "",
+        "authorization": "",
+        "x-bindid": "",
+        "x-deviceid": android_id,
+        "sk": "CQNRW8hsdrKKwHr1ofFgdw==",
+        "iemi": android_id,
+        "x-platform": "Android",
+        "x-devicetoken": "",
+        "x-appversion": "7.4.5",
+    }
+    context = ssl.create_default_context()
+    context.set_ciphers('DEFAULT@SECLEVEL=0')
+    context.load_cert_chain(certfile='wisetv.crt', keyfile='wisetv.key')
     try:
-        async with httpx.AsyncClient() as client:
-            # res = await client.get(f"https://api.wisetv.com.cn:8684/6/program/{channel_id0}/{dt_str}", headers=headers,follow_redirects=True)
-            res = await client.get(f"https://program.wisetv.com.cn/{channel_id0}-1100000041-{dt_str}.json")
+        async with httpx.AsyncClient(verify=context) as client:
+            res = await client.get(f"https://api.wisetv.com.cn:8684/6/program/{channel_id0}/{dt_str}", headers=headers, follow_redirects=True)
         data = res.json()["data"][0]["data"]
         for i in data:
             epg = {
