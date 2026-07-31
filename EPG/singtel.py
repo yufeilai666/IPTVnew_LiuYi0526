@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 import httpx
 
 
-SINGTEL_EPG_URL = "https://api.v3.singtelcast.com/v1/channels/epg/"
+SINGTEL_EPG_URL = "https://api.liuyi0526.com/singtelcast/v1/channels/epg/"
 SINGTEL_CHANNELS_URL = "https://api.v3.singtelcast.com/v1/channels/"
 SINGTEL_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 SINGTEL_TIMEZONE = ZoneInfo("Asia/Singapore")
