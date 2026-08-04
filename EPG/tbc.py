@@ -85,8 +85,8 @@ async def get_epgs_tbc(channel):
                 'desc': desc,
             })
         epgs.sort(key=lambda item: item['starttime'])
-        for i in epgs:
-            print(i)
+        # for i in epgs:
+        #     print(i)
     except Exception as e:
         success = 0
         spidername = os.path.splitext(os.path.basename(__file__))[0]
