@@ -5,6 +5,18 @@ import os
 import time
 import re
 
+
+STARHUB_API_BASE = (
+    "https://waf-starhub-metadata-api-p001.sh-ifs.com/v3.1/epg"
+)
+STARHUB_TIMEOUT = httpx.Timeout(30.0, connect=15.0)
+
+
+def _create_starhub_client():
+    # The upstream endpoint currently serves a self-signed certificate.
+    return httpx.AsyncClient(verify=False, timeout=STARHUB_TIMEOUT)
+
+
 def has_chinese(text):
     # 包含更多中文字符范围
     pattern = r'[\u4e00-\u9fff\u3400-\u4dbf\U00020000-\U0002a6df\U0002a700-\U0002b73f\U0002b740-\U0002b81f\U0002b820-\U0002ceaf]'
@@ -30,8 +42,12 @@ async def get_epgs_starhub(channel, dt):
         "lt_start": str(endtime),
     }
     try:
-        async with httpx.AsyncClient() as client:
-            res = await client.get("https://waf-starhub-metadata-api-p001.ifs.vubiquity.com/v3.1/epg/schedules", params=params)
+        async with _create_starhub_client() as client:
+            res = await client.get(
+                f"{STARHUB_API_BASE}/schedules",
+                params=params,
+            )
+        res.raise_for_status()
         res.encoding = 'utf-8'
         data = res.json()
         for resource in data.get('resources', []):
@@ -68,7 +84,7 @@ async def get_epgs_starhub(channel, dt):
     except Exception as e:
         success = 0
         spidername = os.path.basename(__file__).split('.')[0]
-        msg = 'spider-%s-%s' % (spidername, e)
+        msg = 'spider-%s-%s-%s' % (spidername, type(e).__name__, e)
     ret = {
         'success': success,
         'epgs': epgs,
@@ -87,8 +103,12 @@ async def get_channels_starhub():
         "limit": "150",
         "page": "1"
     }
-    async with httpx.AsyncClient() as client:
-            res = await client.get("https://waf-starhub-metadata-api-p001.ifs.vubiquity.com/v3.1/epg/channels", params=params)
+    async with _create_starhub_client() as client:
+        res = await client.get(
+            f"{STARHUB_API_BASE}/channels",
+            params=params,
+        )
+    res.raise_for_status()
     res.encoding = 'utf-8'
     data = res.json()
     for resource in data.get('resources', []):
@@ -105,6 +125,7 @@ async def get_channels_starhub():
             print(channel)
     return channels
 
-# if __name__ == '__main__':
-#     asyncio.run(get_channels_starhub())
+
+if __name__ == '__main__':
+    asyncio.run(get_channels_starhub())
     # asyncio.run(get_epgs_starhub({'id': 'starhub_d440ee6e-6f9a-4d78-b37b-5be89051145a', 'name': 'Phoenix InfoNews Channel HD', 'id0': 'd440ee6e-6f9a-4d78-b37b-5be89051145a', 'source': 'starhub'}, dt=datetime.datetime.now()))
